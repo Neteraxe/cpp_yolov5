@@ -2,3 +2,4 @@
 .vscode
 build
 convert-onnx
+.git
