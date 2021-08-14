@@ -1,10 +1,11 @@
-import torch
+﻿import torch
 import torch.nn as nn
 import argparse
 from yolov5s import My_YOLO as my_yolov5s
 from yolov5l import My_YOLO as my_yolov5l
 from yolov5m import My_YOLO as my_yolov5m
 from yolov5x import My_YOLO as my_yolov5x
+from yolov5x6 import My_YOLO as my_yolov5x6
 import operator
 import cv2
 from common import Conv,Hardswish,SiLU
@@ -41,37 +42,47 @@ class My_YOLOv5s_extract(nn.Module):
 if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     parser = argparse.ArgumentParser()
-    parser.add_argument('--net_type', default='yolov5s', choices=['yolov5s', 'yolov5l', 'yolov5m', 'yolov5x'])
-    parser.add_argument('--num_classes', default=80, type=int)
+    parser.add_argument('--net_type', default='yolov5s', choices=['yolov5s', 'yolov5l', 'yolov5m', 'yolov5x', 'yolov5x6'])
+    parser.add_argument('--num_classes', default=3, type=int)
+    parser.add_argument('--name', default='customer_best_param.pth', type=str)
     args = parser.parse_args()
     print(args)
 
     # Set up model
     anchors = [[10, 13, 16, 30, 33, 23], [30, 61, 62, 45, 59, 119], [116, 90, 156, 198, 373, 326]]
+    anchor6 = [[19,27,  44,40,  38,94], [96,68,  86,152,  180,137], [140,301,  303,264,  238,542], [436,615,  739,380,  925,792]]
+
     if args.net_type == 'yolov5s':
         net = my_yolov5s(args.num_classes, anchors=anchors, training=False)
     elif args.net_type == 'yolov5l':
         net = my_yolov5l(args.num_classes, anchors=anchors, training=False)
     elif args.net_type == 'yolov5m':
         net = my_yolov5m(args.num_classes, anchors=anchors, training=False)
-    else:
+    elif args.net_type == "yolov5x":
         net = my_yolov5x(args.num_classes, anchors=anchors, training=False)
+    else:
+        net = my_yolov5x6(args.num_classes, anchors=anchor6, training=False)
 
     net.to(device)
     net.eval()
     own_state = net.state_dict()
-    pth = args.net_type+'_param.pth'
+    pth = args.name
     utl_param = torch.load(pth, map_location=device)
     del utl_param['24.anchors']
     del utl_param['24.anchor_grid']
+    #del utl_param['33.anchors']
+    #del utl_param['33.anchor_grid']
+
 
     print(len(utl_param), len(own_state))
     for a, b, namea, nameb in zip(utl_param.values(), own_state.values(), utl_param.keys(), own_state.keys()):
         if namea.find('anchor') > -1:
             print('anchor')
             continue
-        if not operator.eq(a.shape, b.shape):
+        if a.shape != b.shape:
             print(namea, nameb, a.shape, b.shape)
+        #if not operator.eq(a, b):
+        #    print(namea, nameb, a, b)
         else:
             own_state[nameb].copy_(a)
 
@@ -88,8 +99,9 @@ if __name__ == "__main__":
         else:
             onnx_param[nameb].copy_(a)
 
-    output_onnx = args.net_type+'.onnx'
-    inputs = torch.randn(1, 3, 640, 640).to(device)
+    isize = 512
+    output_onnx = args.net_type+str(isize)+'.onnx'
+    inputs = torch.randn(1, 3, isize, isize).to(device)
 
     # Update model
     for k, m in onnx_model.named_modules():
